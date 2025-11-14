@@ -509,3 +509,4 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
+
