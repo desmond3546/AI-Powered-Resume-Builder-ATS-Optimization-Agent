@@ -165,8 +165,8 @@ def generate_pdf_from_text(text: str) -> bytes:
 
 # Example LaTeX template map
 TEMPLATE_MAP = {
-    "Modern": "templates/modern.tex",
-    "Classic": "templates/classic.tex"
+    "ModernCV": "templates/moderncv.tex",
+    "AutoCV": "templates/autocv.tex"
 }
 
 def extract_sections(text: str) -> Dict:
@@ -177,22 +177,79 @@ def extract_sections(text: str) -> Dict:
         if m: sections[header.lower()] = m.group(1).strip()
     return sections
 
+def latex_escape(text: str) -> str:
+    """
+    Escape LaTeX special characters in the resume text.
+    """
+    if not text:
+        return ""
+    replacements = {
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+        "\\": r"\textbackslash{}",
+    }
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
+
 def build_latex_resume(template_file: str, fields: Dict) -> str:
-    # Compile LaTeX to PDF, return path
+    """
+    Compile a LaTeX resume from a template (moderncv.tex or autocv.tex) and field dictionary.
+    Returns path to PDF if successful, else None.
+    """
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             tex_path = os.path.join(tmpdir, "resume.tex")
+
+            # Read template
             with open(template_file, "r", encoding="utf-8") as f:
                 template = f.read()
-            for k,v in fields.items():
-                template = template.replace(f"{{{{{k}}}}}", v)
+
+            # Replace all placeholders safely
+            for k, v in fields.items():
+                template = template.replace(f"{{{{{k}}}}}", latex_escape(v))
+
+            # Write filled template
             with open(tex_path, "w", encoding="utf-8") as f:
                 f.write(template)
-            subprocess.run(["pdflatex", "-interaction=nonstopmode", tex_path], cwd=tmpdir, stdout=subprocess.DEVNULL)
-            pdf_path = tex_path.replace(".tex",".pdf")
-            return pdf_path if os.path.exists(pdf_path) else None
-    except:
+
+            # Compile LaTeX
+            result = subprocess.run(
+                ["pdflatex", "-halt-on-error", "-interaction=nonstopmode", tex_path],
+                cwd=tmpdir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            # Debug info if failed
+            if result.returncode != 0:
+                print("LaTeX compilation failed!")
+                print("stdout:\n", result.stdout)
+                print("stderr:\n", result.stderr)
+                return None
+
+            pdf_path = tex_path.replace(".tex", ".pdf")
+            if os.path.exists(pdf_path):
+                # Copy PDF out of temp folder
+                final_pdf_path = os.path.join(os.getcwd(), "AI_Enhanced_Resume.pdf")
+                with open(pdf_path, "rb") as src, open(final_pdf_path, "wb") as dst:
+                    dst.write(src.read())
+                return final_pdf_path
+            else:
+                return None
+
+    except Exception as e:
+        print(f"LaTeX compile exception: {e}")
         return None
+
 
 # -------------------------
 # Step 1 — Upload / Manual
@@ -303,24 +360,48 @@ st.header("Step 5 — Generate Resume (PDF / DOCX)")
 final_text = st.session_state.enhanced_text or st.session_state.resume_text
 col_pdf, col_docx = st.columns(2)
 
+# Prepare all fields for LaTeX
+fields = extract_sections(final_text)
+# Add additional info if available
+fields["name"] = st.session_state.get("name", "")
+fields["email"] = st.session_state.get("email", "")
+fields["phone"] = st.session_state.get("phone", "")
+fields["linkedin"] = st.session_state.get("linkedin", "")
+fields["github"] = st.session_state.get("github", "")
+
 with col_pdf:
     if st.button("📄 Generate PDF from LaTeX"):
         with st.spinner("Compiling LaTeX..."):
-            fields = extract_sections(final_text)
             pdf_path = build_latex_resume(selected_template_file, fields)
-            if pdf_path:
-                with open(pdf_path, "rb") as f: pdf_bytes = f.read()
-                st.success("PDF generated using LaTeX!")
-                st.download_button("📥 Download LaTeX PDF", data=pdf_bytes, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
+            if pdf_path and os.path.exists(pdf_path):
+                with open(pdf_path, "rb") as f:
+                    pdf_bytes = f.read()
+                st.success("✅ PDF generated using LaTeX!")
+                st.download_button(
+                    "📥 Download LaTeX PDF",
+                    data=pdf_bytes,
+                    file_name="AI_Enhanced_Resume.pdf",
+                    mime="application/pdf"
+                )
             else:
+                st.warning("⚠️ LaTeX compile failed — offering fallback PDF.")
                 pdf_bytes = generate_pdf_from_text(final_text)
-                st.warning("LaTeX compile failed — offering fallback PDF.")
-                st.download_button("📥 Download Fallback PDF", data=pdf_bytes, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
+                st.download_button(
+                    "📥 Download Fallback PDF",
+                    data=pdf_bytes,
+                    file_name="AI_Enhanced_Resume.pdf",
+                    mime="application/pdf"
+                )
 
 with col_docx:
     if st.button("📥 Download DOCX (plain)"):
         docx_bytes = generate_docx_from_text(final_text)
-        st.download_button("📥 Download DOCX", data=docx_bytes, file_name="AI_Enhanced_Resume.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        st.download_button(
+            "📥 Download DOCX",
+            data=docx_bytes,
+            file_name="AI_Enhanced_Resume.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
 
 # -------------------------
 # Comparison & Score History
@@ -366,3 +447,4 @@ st.sidebar.markdown("### 💬 Feedback Chat")
 for entry in st.session_state.feedback_history[-10:]:
     st.sidebar.markdown(f"**You:** {entry['question']}")
     st.sidebar.markdown(f"**AI:** {entry['answer']}\n---")
+
