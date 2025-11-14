@@ -224,11 +224,24 @@ def build_latex_resume(template_name: str, data: Dict[str,str]) -> str:
     return pdf_path if os.path.exists(pdf_path) else None
 
 # -------------------------
-# Session state init
+# Session state init (safe)
 # -------------------------
-for key in ["resume_text", "enhanced_text", "score_history"]:
+# Strings
+for key in ["resume_text", "enhanced_text", "resume_editor"]:
     if key not in st.session_state:
         st.session_state[key] = ""
+
+# Lists
+if "score_history" not in st.session_state or not isinstance(st.session_state["score_history"], list):
+    st.session_state.score_history = []
+
+if "ai_scores" not in st.session_state or not isinstance(st.session_state["ai_scores"], dict):
+    st.session_state.ai_scores = {}
+
+# Optional: missing keywords
+if "enhance_keywords_missing" not in st.session_state:
+    st.session_state.enhance_keywords_missing = []
+
 
 # -------------------------
 # Choose AI engine
@@ -472,6 +485,7 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
+
 
 
 
