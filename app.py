@@ -1,14 +1,11 @@
-# app.py — Finished AI Resume Builder (full)
+# app.py — Polished AI Resume Builder
+from dotenv import load_dotenv
 import os
-import streamlit as st
+load_dotenv()  # must run before os.getenv()
 
-# Load API keys: works both locally and on Streamlit Cloud
-OPENAI_KEY = st.secrets.get("OPENAI_API_KEY")
-GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
-
-# Optional: quick debug
-st.sidebar.write("OpenAI Key loaded?", "✅" if OPENAI_KEY else "❌")
-st.sidebar.write("Gemini Key loaded?", "✅" if GEMINI_KEY else "❌")
+# Load API keys from env
+OPENAI_KEY: str | None = os.getenv("OPENAI_API_KEY")
+GEMINI_KEY: str | None = os.getenv("GEMINI_API_KEY")
 
 import io
 import random
@@ -23,7 +20,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-# AI libs (user must install google-generativeai and openai-python client)
+# AI libs
 import google.generativeai as genai
 from openai import OpenAI
 
@@ -42,6 +39,19 @@ st.sidebar.write("OpenAI:", "✅" if OPENAI_KEY else "❌")
 st.sidebar.write("Gemini:", "✅" if GEMINI_KEY else "❌")
 
 # -------------------------
+# Caching AI calls
+# -------------------------
+@st.cache_data(show_spinner=False)
+def cached_ai_score(resume_text: str, use_gemini_flag: bool) -> float:
+    """Compute AI-based ATS score (cached)."""
+    return ats_score_ai(resume_text, use_gemini_flag)
+
+@st.cache_data(show_spinner=False)
+def cached_ai_enhance(resume_text: str, prompt: str, use_gemini_flag: bool) -> str:
+    """Enhance resume text with AI (cached)."""
+    return call_ai(resume_text, prompt, use_gemini_flag)
+
+# -------------------------
 # Utilities & Helpers
 # -------------------------
 KEYWORDS = [
@@ -49,7 +59,6 @@ KEYWORDS = [
     "TensorFlow", "Pandas", "NumPy", "Scikit-learn", "Streamlit", "SQL"
 ]
 
-# weights for scoring: adjust to taste
 WEIGHTS = {
     "python": 3, "machine learning": 4, "ai": 3, "data": 2,
     "developer": 2, "analysis": 2, "engineer": 3,
@@ -73,15 +82,9 @@ def get_ats_score_local(text: str) -> float:
         hits = min(t.count(kw.lower()), 3)
         score += hits * w
     max_score = sum(WEIGHTS.values()) * 3
-    if max_score == 0:
-        return 0.0
-    return round((score / max_score) * 100, 2)
+    return round((score / max_score) * 100, 2) if max_score else 0.0
 
 def get_ats_score_api(text: str) -> float:
-    """
-    Try to call a free/mock ATS API; if unavailable, fallback to local scoring.
-    Replace the mock URL with a real API endpoint when available.
-    """
     try:
         resp = requests.post("https://mock-ats-api.fly.dev/score", json={"resume_text": text}, timeout=4)
         if resp.status_code == 200:
@@ -89,15 +92,14 @@ def get_ats_score_api(text: str) -> float:
     except Exception:
         pass
     return get_ats_score_local(text)
+
 def ats_score_ai(resume_text: str, use_gemini_flag: bool) -> float:
     prompt = f"Evaluate the following resume for ATS keywords and give a score out of 100:\n\n{resume_text}"
     try:
-        resp_text = call_ai("", prompt, use_gemini_flag)  # text can be empty for scoring
+        resp_text = call_ai("", prompt, use_gemini_flag)
         return float(resp_text.strip().split()[0])
     except Exception:
         return get_ats_score_local(resume_text)
-
-
 
 def re_inject_keywords(orig: str, enhanced: str, keywords=KEYWORDS) -> Tuple[str, List[str]]:
     missing = [k for k in keywords if k.lower() in (orig or "").lower() and k.lower() not in (enhanced or "").lower()]
@@ -136,7 +138,6 @@ def enhance_with_openai(text: str, prompt: str) -> str:
     if not OPENAI_KEY:
         raise RuntimeError("OpenAI API key not configured.")
     client = OpenAI(api_key=OPENAI_KEY)
-    # uses chat.completions - matches user's installed client pattern
     resp = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt + "\n\n" + (text or "")}],
@@ -148,7 +149,6 @@ def enhance_with_openai(text: str, prompt: str) -> str:
 def enhance_with_gemini(text: str, prompt: str) -> str:
     if not GEMINI_KEY:
         raise RuntimeError("Gemini API key not configured.")
-    # Prefer fast flash, then pro. Use model names present in your account.
     for m in ("models/gemini-2.5-flash", "models/gemini-2.5-pro", "models/gemini-flash-latest"):
         try:
             model = genai.GenerativeModel(m)
@@ -156,40 +156,16 @@ def enhance_with_gemini(text: str, prompt: str) -> str:
             return resp.text
         except Exception:
             continue
-    raise RuntimeError("No working Gemini model available for generate_content.")
-def call_ai(text: str, prompt: str, use_gemini_flag: bool) -> str:
-    """
-    Calls either OpenAI or Gemini based on use_gemini_flag.
-    Returns the AI-generated text.
-    """
-    if use_gemini_flag:
-        if not GEMINI_KEY:
-            raise RuntimeError("Gemini API key not configured.")
-        # try multiple Gemini models
-        for m in ("models/gemini-2.5-flash", "models/gemini-2.5-pro", "models/gemini-flash-latest"):
-            try:
-                model = genai.GenerativeModel(m)
-                resp = model.generate_content(prompt + "\n\n" + (text or ""))
-                return resp.text
-            except Exception:
-                continue
-        raise RuntimeError("No working Gemini model available.")
-    else:
-        if not OPENAI_KEY:
-            raise RuntimeError("OpenAI API key not configured.")
-        client = OpenAI(api_key=OPENAI_KEY)
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt + "\n\n" + (text or "")}],
-            temperature=0.2,
-            max_tokens=1200
-        )
-        return resp.choices[0].message.content
+    raise RuntimeError("No working Gemini model available.")
 
-    
+def call_ai(text: str, prompt: str, use_gemini_flag: bool) -> str:
+    if use_gemini_flag:
+        return enhance_with_gemini(text, prompt)
+    else:
+        return enhance_with_openai(text, prompt)
 
 # -------------------------
-# LaTeX template helpers
+# LaTeX helpers
 # -------------------------
 TEMPLATE_MAP = {
     "ModernCV (LaTeX)": "moderncv.tex",
@@ -197,104 +173,71 @@ TEMPLATE_MAP = {
 }
 
 def extract_sections(enhanced_text: str) -> Dict[str, str]:
-    """
-    Try to extract common blocks from the enhanced resume text for template replacement.
-    This is simple heuristic extraction expecting headings like 'Summary', 'Skills', etc.
-    """
     out = {k: "" for k in ("NAME","EMAIL","PHONE","SUMMARY","SKILLS","EXPERIENCE","PROJECTS","EDUCATION","LINKEDIN","GITHUB")}
     txt = (enhanced_text or "").strip()
     if not txt:
         return out
     lines = [l.strip() for l in txt.splitlines() if l.strip()]
     out["NAME"] = lines[0] if lines else ""
-    # scan for email/phone/link
     for l in lines[:8]:
-        if "@" in l and not out["EMAIL"]:
-            out["EMAIL"] = l
-        if any(ch.isdigit() for ch in l) and len([c for c in l if c.isdigit()]) >= 6 and not out["PHONE"]:
-            out["PHONE"] = l
-        if "linkedin" in l.lower() and not out["LINKEDIN"]:
-            out["LINKEDIN"] = l
-        if "github" in l.lower() and not out["GITHUB"]:
-            out["GITHUB"] = l
+        if "@" in l and not out["EMAIL"]: out["EMAIL"] = l
+        if any(ch.isdigit() for ch in l) and len([c for c in l if c.isdigit()]) >= 6 and not out["PHONE"]: out["PHONE"] = l
+        if "linkedin" in l.lower() and not out["LINKEDIN"]: out["LINKEDIN"] = l
+        if "github" in l.lower() and not out["GITHUB"]: out["GITHUB"] = l
     lower = txt.lower()
     def grab(section_name):
         s = section_name.lower()
         if s in lower:
             start = lower.index(s)
-            # find next double newline or end
             end = lower.find("\n\n", start)
-            if end == -1:
-                return txt[start:].strip()
-            return txt[start:end].strip()
+            return txt[start:end].strip() if end != -1 else txt[start:].strip()
         return ""
-    out["SUMMARY"] = grab("summary")
-    out["SKILLS"] = grab("skills")
-    out["EXPERIENCE"] = grab("experience")
-    out["PROJECTS"] = grab("projects")
-    out["EDUCATION"] = grab("education")
-    # Clean section headers if present (remove the header word)
-    for k in ("SUMMARY","SKILLS","EXPERIENCE","PROJECTS","EDUCATION"):
-        out[k] = out[k].split(":",1)[-1].strip() if out[k] else ""
+    out["SUMMARY"] = grab("summary").split(":",1)[-1].strip()
+    out["SKILLS"] = grab("skills").split(":",1)[-1].strip()
+    out["EXPERIENCE"] = grab("experience").split(":",1)[-1].strip()
+    out["PROJECTS"] = grab("projects").split(":",1)[-1].strip()
+    out["EDUCATION"] = grab("education").split(":",1)[-1].strip()
     return out
 
 def fill_latex_template(template_path: str, data: Dict[str,str]) -> str:
     with open(template_path, "r", encoding="utf-8") as f:
         tex = f.read()
-    # Replace placeholders like <NAME>, <SUMMARY>, etc.
     for k, v in data.items():
         tex = tex.replace(f"<{k}>", v or "")
     return tex
 
 def build_latex_resume(template_name: str, data: Dict[str,str]) -> str:
-    """
-    Fill LaTeX template from templates/ and compile to PDF. Returns path to PDF or None.
-    """
     template_path = os.path.join("templates", template_name)
     if not os.path.exists(template_path):
         st.error(f"Template file not found: {template_path}")
         return None
-
     tex_content = fill_latex_template(template_path, data)
     tmp_dir = tempfile.mkdtemp()
     tex_file = os.path.join(tmp_dir, "resume.tex")
-    with open(tex_file, "w", encoding="utf-8") as f:
-        f.write(tex_content)
-
+    with open(tex_file, "w", encoding="utf-8") as f: f.write(tex_content)
     try:
-        # try to compile (pdflatex must be present). run twice for references (safe)
-        subprocess.run(["pdflatex", "-interaction=nonstopmode", "resume.tex"], cwd=tmp_dir,
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        subprocess.run(["pdflatex", "-interaction=nonstopmode", "resume.tex"], cwd=tmp_dir,
-                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-    except subprocess.CalledProcessError as e:
-        # LaTeX failed — show error in UI and fallback later
+        subprocess.run(["pdflatex","-interaction=nonstopmode","resume.tex"], cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        subprocess.run(["pdflatex","-interaction=nonstopmode","resume.tex"], cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError:
         st.error("LaTeX compilation failed. Falling back to simple PDF.")
         return None
-
     pdf_path = os.path.join(tmp_dir, "resume.pdf")
-    if os.path.exists(pdf_path):
-        return pdf_path
-    return None
+    return pdf_path if os.path.exists(pdf_path) else None
 
 # -------------------------
 # Session state init
 # -------------------------
-if "resume_text" not in st.session_state:
-    st.session_state.resume_text = ""
-if "enhanced_text" not in st.session_state:
-    st.session_state.enhanced_text = ""
-if "score_history" not in st.session_state:
-    st.session_state.score_history = []
+for key in ["resume_text", "enhanced_text", "score_history"]:
+    if key not in st.session_state:
+        st.session_state[key] = ""
 
 # -------------------------
 # Choose AI engine
 # -------------------------
 use_gemini = st.checkbox("Use Gemini (Google) instead of OpenAI", value=False)
 
-
 # -------------------------
-# UI: Step 1 — Input
+# Step 1 — Upload / Manual
 # -------------------------
 st.header("Step 1 — Upload or Enter Resume")
 col1, col2 = st.columns([2,1])
@@ -314,35 +257,29 @@ with col1:
             if extracted.strip():
                 st.session_state.resume_text = extracted
     else:
-        # manual form fields (helps LaTeX auto-fill)
-        name = st.text_input("Full name", value="")
-        email = st.text_input("Email", value="")
-        phone = st.text_input("Phone", value="")
-        linkedin = st.text_input("LinkedIn / profile", value="")
-        github = st.text_input("GitHub / profile", value="")
+        # manual form
+        name = st.text_input("Full name", "")
+        email = st.text_input("Email", "")
+        phone = st.text_input("Phone", "")
+        linkedin = st.text_input("LinkedIn / profile", "")
+        github = st.text_input("GitHub / profile", "")
         edu = st.text_area("Education (brief)", height=80)
         skills = st.text_area("Skills (comma or bullet list)", height=80)
         work = st.text_area("Work experience (paste bullets)", height=120)
         projects = st.text_area("Projects / achievements", height=100)
         summary = st.text_area("Summary / Objective (optional)", height=80)
         if st.button("✅ Merge manual entries into Resume Text"):
-            # build simple text structure to feed AI or templates
             parts = []
             if name: parts.append(name)
             if email: parts.append(email)
             if phone: parts.append(phone)
             if linkedin: parts.append(linkedin)
             if github: parts.append(github)
-            if summary:
-                parts.append("\nSummary:\n" + summary)
-            if edu:
-                parts.append("\nEducation:\n" + edu)
-            if skills:
-                parts.append("\nSkills:\n" + skills)
-            if work:
-                parts.append("\nExperience:\n" + work)
-            if projects:
-                parts.append("\nProjects:\n" + projects)
+            if summary: parts.append("\nSummary:\n" + summary)
+            if edu: parts.append("\nEducation:\n" + edu)
+            if skills: parts.append("\nSkills:\n" + skills)
+            if work: parts.append("\nExperience:\n" + work)
+            if projects: parts.append("\nProjects:\n" + projects)
             st.session_state.resume_text = "\n".join(parts)
             st.success("Manual inputs copied into resume text editor below.")
 
@@ -358,72 +295,68 @@ if not st.session_state.resume_text.strip():
     st.stop()
 
 # show extracted text
-st.subheader("Extracted / Entered Resume Text")
+st.subheader("Resume Text Editor")
 st.text_area("Resume Text (you can edit)", value=st.session_state.resume_text, height=260, key="resume_editor")
-# keep edits
-if st.session_state.get("resume_editor") is not None:
-    st.session_state.resume_text = st.session_state.resume_editor
+st.session_state.resume_text = st.session_state.get("resume_editor") or ""
 
-# Compute all ATS scores
+# -------------------------
+# Step 2 — AI ATS Score
+# -------------------------
+st.header("Step 2 — Compute AI-based ATS Score")
+if st.button("Compute AI ATS Score"):
+    if st.session_state.resume_text.strip():
+        with st.spinner("Calculating AI score..."):
+            try:
+                st.session_state.ai_score = cached_ai_score(st.session_state.resume_text, use_gemini)
+            except Exception as e:
+                st.error(f"AI score computation failed: {e}")
+                st.session_state.ai_score = None
+
 local_score = get_ats_score_local(st.session_state.resume_text)
-
-try:
-    ai_score = ats_score_ai(st.session_state.resume_text, use_gemini)
-except Exception:
-    ai_score = None
+st.metric("Local ATS Score", f"{local_score} / 100")
+if st.session_state.get("ai_score") is not None:
+    st.metric("AI-based ATS Score", f"{st.session_state.ai_score} / 100", delta=(st.session_state.ai_score - local_score))
 
 try:
     api_score = get_ats_score_api(st.session_state.resume_text)
 except Exception:
     api_score = None
-
-# Display scores
-st.subheader("ATS Scores Comparison")
-st.metric("Local ATS Score", f"{local_score} / 100")
-if ai_score is not None:
-    st.metric("AI-based ATS Score", f"{ai_score} / 100", delta=(ai_score - local_score))
-else:
-    st.info("AI-based score not available (requires API key).")
-
 if api_score is not None:
     st.metric("External API ATS Score", f"{api_score} / 100", delta=(api_score - local_score))
 
 # -------------------------
-# UI: Step 2 & 3 — ATS score & AI Enhancement
+# Step 3 — Enhance Resume
 # -------------------------
-st.header("Step 2 — ATS Scoring  & Step 3 — AI Enhancement")
-st.write("Keywords used for ATS scoring:", ", ".join(KEYWORDS))
-
-prompt = """You are an expert technical resume writer and ATS specialist.
+st.header("Step 3 — Enhance Resume with AI")
+enhance_prompt = """You are an expert technical resume writer and ATS specialist.
 Enhance the resume text to improve clarity, grammar, formatting and to preserve technical keywords.
 Keep the resume concise and professional. Return ONLY the resume content (no commentary)."""
 
-if st.button("✨ Enhance Resume with AI"):
-    with st.spinner("Enhancing resume..."):
-        try:
-            enhanced = call_ai(st.session_state.resume_text, prompt, use_gemini)
-        except Exception as e:
-            st.error(f"AI enhancement failed: {e}")
-            enhanced = ""
+if st.button("✨ Enhance Resume"):
+    if st.session_state.resume_text.strip():
+        with st.spinner("Enhancing resume..."):
+            try:
+                enhanced = cached_ai_enhance(st.session_state.resume_text, enhance_prompt, use_gemini)
+                enhanced, missing = re_inject_keywords(st.session_state.resume_text, enhanced)
+                st.session_state.enhanced_text = enhanced
 
-        if enhanced:
-            enhanced, missing = re_inject_keywords(st.session_state.resume_text, enhanced)
-            st.session_state.enhanced_text = enhanced
-            # update scores and history
-            orig_score = ats_score_ai(st.session_state.resume_text, use_gemini)
-            new_score = ats_score_ai(st.session_state.enhanced_text, use_gemini)
-            st.session_state.score_history.append({"orig": orig_score, "final": new_score})
-            st.success(f"Enhanced! New ATS Score: {new_score}")
-            # show missing reinjected keywords info
-            if missing:
-                st.info(f"The following keywords were re-inserted to preserve ATS matches: {', '.join(missing)}")
+                # update scores and history
+                orig_score = cached_ai_score(st.session_state.resume_text, use_gemini)
+                new_score = cached_ai_score(st.session_state.enhanced_text, use_gemini)
+                st.session_state.score_history.append({"orig": orig_score, "final": new_score})
+
+                st.success(f"Enhanced! New ATS Score: {new_score}")
+                if missing:
+                    st.info(f"Re-injected keywords to preserve ATS matches: {', '.join(missing)}")
+            except Exception as e:
+                st.error(f"AI enhancement failed: {e}")
 
 if st.session_state.enhanced_text:
     st.subheader("Enhanced Resume (Preview)")
     st.text_area("Enhanced Resume", value=st.session_state.enhanced_text, height=320)
 
 # -------------------------
-# Step 4 — Template selection (ModernCV / AutoCV only)
+# Step 4 — Template Selection
 # -------------------------
 st.header("Step 4 — Template Selection")
 template_choice = st.selectbox("Choose a LaTeX template:", list(TEMPLATE_MAP.keys()))
@@ -434,31 +367,23 @@ st.write(f"Selected template file: `{selected_template_file}`")
 # Step 5 — Generate & Download
 # -------------------------
 st.header("Step 5 — Generate Resume (PDF / DOCX)")
-
 final_text = st.session_state.enhanced_text or st.session_state.resume_text
-orig_live = ats_score_ai(st.session_state.resume_text, use_gemini)
-final_score = ats_score_ai(final_text, use_gemini)
+orig_live = cached_ai_score(st.session_state.resume_text, use_gemini)
+final_score = cached_ai_score(final_text, use_gemini)
 st.metric("Original ATS Score", f"{orig_live} / 100", delta=None)
 st.metric("Final ATS Score", f"{final_score} / 100", delta=(final_score - orig_live))
 
-
 col_download_pdf, col_download_docx = st.columns(2)
-
 with col_download_pdf:
     if st.button("📄 Generate PDF from LaTeX"):
         with st.spinner("Filling template and compiling LaTeX..."):
-            # extract structured fields for template placeholders
             fields = extract_sections(final_text)
-            # fill template and compile
-            template_path = os.path.join("templates", selected_template_file)
             pdf_path = build_latex_resume(selected_template_file, fields)
             if pdf_path:
-                with open(pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
+                with open(pdf_path, "rb") as f: pdf_bytes = f.read()
                 st.success("PDF generated using LaTeX!")
                 st.download_button("📥 Download LaTeX PDF", data=pdf_bytes, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
             else:
-                # fallback simple PDF from plain text
                 pdf_buf = generate_pdf_from_text(final_text)
                 st.warning("LaTeX compile failed or not available — offering fallback PDF.")
                 st.download_button("📥 Download Fallback PDF", data=pdf_buf, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
@@ -473,22 +398,16 @@ with col_download_docx:
 # -------------------------
 st.header("Comparison & Score Tracker")
 c1, c2 = st.columns(2)
-with c1:
-    st.subheader("Original Resume")
-    st.text_area("Original", value=st.session_state.resume_text, height=300)
-with c2:
-    st.subheader("Enhanced Resume")
-    st.text_area("Enhanced", value=st.session_state.enhanced_text or st.session_state.resume_text, height=300)
+with c1: st.text_area("Original Resume", value=st.session_state.resume_text, height=300)
+with c2: st.text_area("Enhanced Resume", value=st.session_state.enhanced_text or st.session_state.resume_text, height=300)
 
 if st.session_state.score_history:
     st.subheader("Score Improvement History")
     rows = st.session_state.score_history[-12:]
-    origs = [r["orig"] for r in rows]
-    finals = [r["final"] for r in rows]
-    st.line_chart({"original": origs, "final": finals})
+    st.line_chart({"original": [r["orig"] for r in rows], "final": [r["final"] for r in rows]})
 
 # -------------------------
-# Sidebar Feedback Chat (light)
+# Sidebar Feedback Chat
 # -------------------------
 st.sidebar.header("💬 Quick Feedback Chat")
 if st.session_state.resume_text:
@@ -513,12 +432,3 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
-
-
-
-
-
-
-
-
-
