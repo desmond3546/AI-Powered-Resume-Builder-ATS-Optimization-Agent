@@ -208,7 +208,7 @@ def fill_latex_template(template_path: str, data: Dict[str,str]) -> str:
 def build_latex_resume(template_name: str, data: Dict[str,str]) -> str:
     # Use __file__ to get the directory of app.py
     base_dir = os.path.dirname(os.path.abspath(__file__))
-    template_path = os.path.join(base_dir, "templates", template_name)
+    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), template_name)
 
     if not os.path.exists(template_path):
         st.error(f"Template file not found: {template_path}")
@@ -488,5 +488,6 @@ if st.session_state.resume_text:
 
         # Display the AI response **after spinner ends**
         st.sidebar.text_area("Feedback Response", value=feedback_output, height=200, key="feedback_response")
+
 
 
