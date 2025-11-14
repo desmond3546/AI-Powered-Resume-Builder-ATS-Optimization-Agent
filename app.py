@@ -1,6 +1,9 @@
 # app.py — Finished AI Resume Builder (full)
 from dotenv import load_dotenv
 load_dotenv()  # must run before os.getenv()
+# Load API keys from env
+OPENAI_KEY: str | None = os.getenv("OPENAI_API_KEY")
+GEMINI_KEY: str | None = os.getenv("GEMINI_API_KEY")
 
 import os
 import io
@@ -27,9 +30,6 @@ st.set_page_config(page_title="AI Resume Agent", page_icon="🤖", layout="wide"
 st.title("🤖 AI Resume Builder & ATS Optimization Agent")
 st.markdown("Upload or paste your resume, enhance with AI (OpenAI / Gemini) and download ATS-optimized DOCX/PDF.")
 
-# Load API keys from env
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 if GEMINI_KEY:
     genai.configure(api_key=GEMINI_KEY)
 
@@ -509,4 +509,3 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
-
