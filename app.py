@@ -6,7 +6,8 @@ import streamlit as st
 
 OPENAI_KEY = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-
+import platform
+import shutil
 import io
 import random
 import requests
@@ -397,6 +398,7 @@ st.write(f"Selected template file: `{selected_template_file}`")
 # Step 5 — Generate & Download
 # -------------------------
 st.header("Step 5 — Generate Resume (PDF / DOCX)")
+
 final_text = st.session_state.enhanced_text or st.session_state.resume_text
 orig_live = cached_ai_score(st.session_state.resume_text, use_gemini)
 final_score = cached_ai_score(final_text, use_gemini)
@@ -404,18 +406,30 @@ st.metric("Original ATS Score", f"{orig_live} / 100", delta=None)
 st.metric("Final ATS Score", f"{final_score} / 100", delta=(final_score - orig_live))
 
 col_download_pdf, col_download_docx = st.columns(2)
+
+# Detect if pdflatex is available
+pdflatex_path = shutil.which("pdflatex")
+running_on_cloud = "streamlit" in platform.platform().lower() or pdflatex_path is None
+
 with col_download_pdf:
-    if st.button("📄 Generate PDF from LaTeX"):
-        with st.spinner("Filling template and compiling LaTeX..."):
-            fields = extract_sections(final_text)
-            pdf_path = build_latex_resume(selected_template_file, fields)
-            if pdf_path:
-                with open(pdf_path, "rb") as f: pdf_bytes = f.read()
-                st.success("PDF generated using LaTeX!")
-                st.download_button("📥 Download LaTeX PDF", data=pdf_bytes, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
+    if st.button("📄 Generate PDF"):
+        with st.spinner("Generating PDF..."):
+            if not running_on_cloud:
+                # Try LaTeX generation locally
+                fields = extract_sections(final_text)
+                pdf_path = build_latex_resume(selected_template_file, fields)
+                if pdf_path:
+                    with open(pdf_path, "rb") as f: pdf_bytes = f.read()
+                    st.success("PDF generated using LaTeX!")
+                    st.download_button("📥 Download LaTeX PDF", data=pdf_bytes, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
+                else:
+                    st.warning("LaTeX compile failed — offering fallback PDF.")
+                    pdf_buf = generate_pdf_from_text(final_text)
+                    st.download_button("📥 Download Fallback PDF", data=pdf_buf, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
             else:
+                # Always fallback on Cloud
+                st.info("LaTeX PDF not supported here — using fallback PDF.")
                 pdf_buf = generate_pdf_from_text(final_text)
-                st.warning("LaTeX compile failed or not available — offering fallback PDF.")
                 st.download_button("📥 Download Fallback PDF", data=pdf_buf, file_name="AI_Enhanced_Resume.pdf", mime="application/pdf")
 
 with col_download_docx:
@@ -478,6 +492,7 @@ if st.session_state.resume_text:
 
         # Display the AI response **after spinner ends**
         st.sidebar.text_area("Feedback Response", value=feedback_output, height=200, key="feedback_response")
+
 
 
 
