@@ -299,56 +299,59 @@ st.text_area("Resume Text (you can edit)", value=st.session_state.resume_text, h
 st.session_state.resume_text = st.session_state.get("resume_editor") or ""
 
 # -------------------------
-# Step 2 — AI ATS Score
+# Step 2 — Compute AI ATS Score (optimized)
 # -------------------------
 st.header("Step 2 — Compute AI-based ATS Score")
+
+if "ai_scores" not in st.session_state:
+    st.session_state.ai_scores = {}
+
+resume_key = f"score_{st.session_state.resume_text}_{use_gemini}"
+
 if st.button("Compute AI ATS Score"):
-    if st.session_state.resume_text.strip():
-        with st.spinner("Calculating AI score..."):
+    with st.spinner("Calculating AI score..."):
+        if resume_key not in st.session_state.ai_scores:
             try:
-                st.session_state.ai_score = cached_ai_score(st.session_state.resume_text, use_gemini)
+                st.session_state.ai_scores[resume_key] = cached_ai_score(st.session_state.resume_text, use_gemini)
             except Exception as e:
-                st.error(f"AI score computation failed: {e}")
-                st.session_state.ai_score = None
+                st.error(f"AI score failed: {e}")
+                st.session_state.ai_scores[resume_key] = get_ats_score_local(st.session_state.resume_text)
 
 local_score = get_ats_score_local(st.session_state.resume_text)
-st.metric("Local ATS Score", f"{local_score} / 100")
-if st.session_state.get("ai_score") is not None:
-    st.metric("AI-based ATS Score", f"{st.session_state.ai_score} / 100", delta=(st.session_state.ai_score - local_score))
+ai_score = st.session_state.ai_scores.get(resume_key, local_score)
 
-try:
-    api_score = get_ats_score_api(st.session_state.resume_text)
-except Exception:
-    api_score = None
-if api_score is not None:
-    st.metric("External API ATS Score", f"{api_score} / 100", delta=(api_score - local_score))
+st.metric("Local ATS Score", f"{local_score} / 100")
+st.metric("AI-based ATS Score", f"{ai_score} / 100", delta=(ai_score - local_score))
 
 # -------------------------
-# Step 3 — Enhance Resume
+# Step 3 — Enhance Resume (optimized)
 # -------------------------
 st.header("Step 3 — Enhance Resume with AI")
-enhance_prompt = """You are an expert technical resume writer and ATS specialist.
-Enhance the resume text to improve clarity, grammar, formatting and to preserve technical keywords.
-Keep the resume concise and professional. Return ONLY the resume content (no commentary)."""
+enhance_key = f"enhance_{st.session_state.resume_text}_{use_gemini}"
 
 if st.button("✨ Enhance Resume"):
-    if st.session_state.resume_text.strip():
+    if enhance_key not in st.session_state:
         with st.spinner("Enhancing resume..."):
             try:
-                enhanced = cached_ai_enhance(st.session_state.resume_text, enhance_prompt, use_gemini)
-                enhanced, missing = re_inject_keywords(st.session_state.resume_text, enhanced)
-                st.session_state.enhanced_text = enhanced
+                enhanced_text = cached_ai_enhance(st.session_state.resume_text, enhance_prompt, use_gemini)
+                enhanced_text, missing_keywords = re_inject_keywords(st.session_state.resume_text, enhanced_text)
+                st.session_state.enhanced_text = enhanced_text
+                st.session_state.enhance_keywords_missing = missing_keywords
+                # cache enhanced
+                st.session_state[enhance_key] = enhanced_text
 
-                # update scores and history
-                orig_score = cached_ai_score(st.session_state.resume_text, use_gemini)
-                new_score = cached_ai_score(st.session_state.enhanced_text, use_gemini)
-                st.session_state.score_history.append({"orig": orig_score, "final": new_score})
+                # update scores once
+                orig_score = ai_score
+                final_score = cached_ai_score(enhanced_text, use_gemini)
+                st.session_state.score_history.append({"orig": orig_score, "final": final_score})
 
-                st.success(f"Enhanced! New ATS Score: {new_score}")
-                if missing:
-                    st.info(f"Re-injected keywords to preserve ATS matches: {', '.join(missing)}")
+                st.success(f"Enhanced! New ATS Score: {final_score}")
+                if missing_keywords:
+                    st.info(f"Re-injected keywords: {', '.join(missing_keywords)}")
             except Exception as e:
                 st.error(f"AI enhancement failed: {e}")
+    else:
+        st.session_state.enhanced_text = st.session_state[enhance_key]
 
 if st.session_state.enhanced_text:
     st.subheader("Enhanced Resume (Preview)")
@@ -465,4 +468,5 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
+
 
