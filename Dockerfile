@@ -7,12 +7,14 @@ WORKDIR /app
 # Copy project files
 COPY . /app
 
-# Install dependencies
-RUN pip install --upgrade pip
-RUN pip install -r requirements.txt
+# Upgrade pip and install dependencies in one layer
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Expose port for Streamlit
+# Expose port (Vercel sets $PORT dynamically)
 EXPOSE 8501
 
-# Run Streamlit
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.enableCORS=false", "--server.headless=true"]
+# Use environment variable PORT if available (Vercel sets $PORT)
+ENV PORT 8501
+
+# Run Streamlit in headless mode
+CMD ["sh", "-c", "streamlit run app.py --server.port=${PORT} --server.enableCORS=false --server.headless=true"]
