@@ -4,8 +4,8 @@ import os
 load_dotenv()  # must run before os.getenv()
 
 # Load API keys from env
-OPENAI_KEY: str | None = os.getenv("OPENAI_API_KEY")
-GEMINI_KEY: str | None = os.getenv("GEMINI_API_KEY")
+OPENAI_KEY = st.secrets.get("OPENAI_API_KEY")
+GEMINI_KEY = st.secrets.get("GEMINI_API_KEY")
 
 import io
 import random
