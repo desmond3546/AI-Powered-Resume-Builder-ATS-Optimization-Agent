@@ -44,6 +44,11 @@ st.markdown("Upload or paste your resume, enhance with AI (OpenAI / Gemini) and 
 st.sidebar.markdown("### API Keys")
 st.sidebar.write("OpenAI:", "✅" if OPENAI_KEY else "❌")
 st.sidebar.write("Gemini:", "✅" if GEMINI_KEY else "❌")
+# -------------------------
+# AI engine choice (sidebar)
+# -------------------------
+st.sidebar.header("AI Engine Selection")
+use_gemini = st.sidebar.checkbox("Use Gemini (Google) instead of OpenAI", value=False)
 
 # -------------------------
 # Session state
@@ -343,3 +348,4 @@ st.sidebar.markdown("### 💬 Feedback Chat")
 for entry in st.session_state.feedback_history[-10:]:
     st.sidebar.markdown(f"**You:** {entry['question']}")
     st.sidebar.markdown(f"**AI:** {entry['answer']}\n---")
+
