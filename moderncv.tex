@@ -1,38 +1,53 @@
 \documentclass[11pt,a4paper,sans]{moderncv}
-
-\moderncvstyle{classic}
-\moderncvcolor{blue}
+\moderncvstyle{classic} % style options: casual, classic, banking, oldstyle
+\moderncvcolor{blue}    % color options: blue, orange, green, red, purple, grey, black
 
 \usepackage[scale=0.85]{geometry}
+\usepackage{hyperref}
 
-% ------------------------------
-% FIX: enable scalable fonts
-% ------------------------------
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
-\usepackage{microtype}
-
-\name{<NAME>}{}
+% -----------------------
+% Personal Information
+% -----------------------
+\name{<NAME>}{} 
 \email{<EMAIL>}
-\phone{<PHONE>}
-\social[github]{<GITHUB>}
+\phone[mobile]{<PHONE>}
 \social[linkedin]{<LINKEDIN>}
+\social[github]{<GITHUB>}
 
+% -----------------------
+% Document
+% -----------------------
 \begin{document}
+
 \makecvtitle
 
+% -----------------------
+% Summary
+% -----------------------
 \section{Summary}
 <SUMMARY>
 
+% -----------------------
+% Skills
+% -----------------------
 \section{Skills}
 <SKILLS>
 
+% -----------------------
+% Experience
+% -----------------------
 \section{Experience}
 <EXPERIENCE>
 
+% -----------------------
+% Projects
+% -----------------------
 \section{Projects}
 <PROJECTS>
 
+% -----------------------
+% Education
+% -----------------------
 \section{Education}
 <EDUCATION>
 
