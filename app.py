@@ -1,12 +1,14 @@
 # app.py — Finished AI Resume Builder (full)
 import os
-from dotenv import load_dotenv
 import streamlit as st
 
-
+# Load API keys: works both locally and on Streamlit Cloud
 OPENAI_KEY = os.getenv("OPENAI_API_KEY") or st.secrets.get("OPENAI_API_KEY")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
 
+# Optional: quick debug
+st.sidebar.write("OpenAI Key loaded?", "✅" if OPENAI_KEY else "❌")
+st.sidebar.write("Gemini Key loaded?", "✅" if GEMINI_KEY else "❌")
 
 import io
 import random
@@ -511,6 +513,7 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
+
 
 
 
