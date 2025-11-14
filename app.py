@@ -2,8 +2,8 @@
 from dotenv import load_dotenv
 load_dotenv()  # must run before os.getenv()
 # Load API keys from env
-OPENAI_KEY: str | None = os.getenv("OPENAI_API_KEY")
-GEMINI_KEY: str | None = os.getenv("GEMINI_API_KEY")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")  # type: Optional[str]
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")  # type: Optional[str]
 
 import os
 import io
@@ -509,3 +509,4 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
+
