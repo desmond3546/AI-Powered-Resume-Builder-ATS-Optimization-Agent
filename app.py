@@ -341,30 +341,28 @@ if st.session_state.score_history:
 st.sidebar.header("💬 Quick Feedback Chat")
 msg = st.sidebar.text_area("Ask for feedback:", height=90)
 if st.sidebar.button("Send feedback request"):
-    if msg.strip():
-        with st.sidebar.spinner("Getting feedback..."):
-            prompt = f"Provide concise actionable feedback on this resume:\n\n{st.session_state.enhanced_text or st.session_state.resume_text}\n\nQuestion: {msg}"
-            try:
-                if use_gemini and GEMINI_KEY:
-                    model = genai.GenerativeModel("models/gemini-2.5-flash")
-                    resp = model.generate_content(prompt)
-                    answer = resp.text
-                elif OPENAI_KEY:
-                    client = OpenAI(api_key=OPENAI_KEY)
-                    r = client.chat.completions.create(
-                        model="gpt-4o-mini",
-                        messages=[{"role":"user","content":prompt}],
-                        temperature=0.3,
-                        max_tokens=450
-                    )
-                    answer = r.choices[0].message.content
-                else:
-                    answer = "No AI key configured."
-            except Exception as e:
-                answer = f"Feedback call failed: {e}"
+    with st.spinner("Getting feedback..."):  # <-- main area spinner
+        try:
+            if use_gemini and GEMINI_KEY:
+                model = genai.GenerativeModel("models/gemini-2.5-flash")
+                resp = model.generate_content(f"Provide concise actionable feedback on this resume:\n\n{st.session_state.enhanced_text or st.session_state.resume_text}")
+                st.session_state.feedback_history.append({"question": msg, "answer": resp.text})
+            elif OPENAI_KEY:
+                client = OpenAI(api_key=OPENAI_KEY)
+                r = client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role":"user","content":f"Provide concise actionable feedback on this resume:\n\n{st.session_state.enhanced_text or st.session_state.resume_text}"}],
+                    temperature=0.3,
+                    max_tokens=450
+                )
+                st.session_state.feedback_history.append({"question": msg, "answer": r.choices[0].message.content})
+            else:
+                st.session_state.feedback_history.append({"question": msg, "answer": "No AI key configured."})
+        except Exception as e:
+            st.session_state.feedback_history.append({"question": msg, "answer": f"Feedback call failed: {e}"})
 
-            st.session_state.feedback_history.append({"question": msg, "answer": answer})
-
+# Render chat history in sidebar
+st.sidebar.markdown("### 💬 Feedback Chat")
 for entry in st.session_state.feedback_history[-10:]:
     st.sidebar.markdown(f"**You:** {entry['question']}")
     st.sidebar.markdown(f"**AI:** {entry['answer']}\n---")
