@@ -206,22 +206,43 @@ def fill_latex_template(template_path: str, data: Dict[str,str]) -> str:
     return tex
 
 def build_latex_resume(template_name: str, data: Dict[str,str]) -> str:
-    template_path = os.path.join("templates", template_name)
+    # Use __file__ to get the directory of app.py
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    template_path = os.path.join(base_dir, "templates", template_name)
+
     if not os.path.exists(template_path):
         st.error(f"Template file not found: {template_path}")
         return None
+
     tex_content = fill_latex_template(template_path, data)
     tmp_dir = tempfile.mkdtemp()
     tex_file = os.path.join(tmp_dir, "resume.tex")
-    with open(tex_file, "w", encoding="utf-8") as f: f.write(tex_content)
+
+    with open(tex_file, "w", encoding="utf-8") as f:
+        f.write(tex_content)
+
     try:
-        subprocess.run(["pdflatex","-interaction=nonstopmode","resume.tex"], cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        subprocess.run(["pdflatex","-interaction=nonstopmode","resume.tex"], cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "resume.tex"],
+            cwd=tmp_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
+        subprocess.run(
+            ["pdflatex", "-interaction=nonstopmode", "resume.tex"],
+            cwd=tmp_dir,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True
+        )
     except subprocess.CalledProcessError:
         st.error("LaTeX compilation failed. Falling back to simple PDF.")
         return None
+
     pdf_path = os.path.join(tmp_dir, "resume.pdf")
     return pdf_path if os.path.exists(pdf_path) else None
+
 
 # -------------------------
 # Session state init (safe)
@@ -467,4 +488,5 @@ if st.session_state.resume_text:
 
         # Display the AI response **after spinner ends**
         st.sidebar.text_area("Feedback Response", value=feedback_output, height=200, key="feedback_response")
+
 
