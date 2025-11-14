@@ -2,6 +2,7 @@
 from dotenv import load_dotenv
 import os
 load_dotenv()  # must run before os.getenv()
+import streamlit as st
 
 OPENAI_KEY = st.secrets.get("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
 GEMINI_KEY = st.secrets.get("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
@@ -11,7 +12,6 @@ import random
 import requests
 import subprocess
 import tempfile
-import streamlit as st
 from typing import Tuple, List, Dict
 from PyPDF2 import PdfReader
 from docx import Document
@@ -465,3 +465,4 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
+
