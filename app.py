@@ -326,6 +326,10 @@ st.metric("AI-based ATS Score", f"{ai_score} / 100", delta=(ai_score - local_sco
 # -------------------------
 # Step 3 — Enhance Resume (optimized)
 # -------------------------
+enhance_prompt = """You are an expert technical resume writer and ATS specialist.
+Enhance the resume text to improve clarity, grammar, formatting and to preserve technical keywords.
+Keep the resume concise and professional. Return ONLY the resume content (no commentary)."""
+
 st.header("Step 3 — Enhance Resume with AI")
 enhance_key = f"enhance_{st.session_state.resume_text}_{use_gemini}"
 
@@ -468,5 +472,6 @@ if st.session_state.resume_text:
                     st.sidebar.info("No AI key configured.")
             except Exception as e:
                 st.sidebar.error(f"Feedback call failed: {e}")
+
 
 
